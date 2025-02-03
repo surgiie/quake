@@ -1,61 +1,98 @@
 #!/usr/bin/env bash
 
-# Focus/unfocus a window ("quake") with xdotool, wmctrl by binary name and plays an open/close mp3 file sound with ffmpeg
-# Usage ./quake tilix /some/mp3file /some/other/mp3file
-if [ "$#" -ne 3 ]; then
-    echo "Usage: $0 <binary name> <mp3-open-file> <close-mp3-file>"
-    exit 1
+version="0.1.0"
+
+if [ "$1" = "--version" ]; then
+    echo "v$version"
+    exit 0
 fi
 
-if [! which xdotool >/dev/null 2>&1]; then
+if [ "$#" = 0 ]; then
+    echo "usage: quake <process-name:path-name> <mp3-focus-file> <mp3-hide-file>"
+    exit 0
+fi
+
+if [ ! $(which xdotool) ]; then
     echo "xdotool is required"
     exit 1
 fi
 
-if [! which wmctrl >/dev/null 2>&1]; then
+if [ ! $(which wmctrl) ]; then
     echo "wmctrl is required"
     exit 1
 fi
 
-if [! which ffplay >/dev/null 2>&1]; then
-    echo "ffplay/ffmpeg is required"
-    exit 1
-fi
-
 play_sound() {
-    if [ ! -f $1 ]; then
-        echo "File not found: $1"
+    # expand ~ to $home
+    input_path="$1"
+    expanded_path="${input_path/#\~/$HOME}"
+
+    if [ -z $1 ]; then
+        echo "no sound file provided"
+        return
+    fi
+
+    if [ ! $(which ffplay) ]; then
+        echo "ffplay is required"
         exit 1
     fi
-    ffplay -nodisp -autoexit $1 >/dev/null 2>&1
+
+    if [ ! -f $expanded_path ]; then
+        echo "file not found: $1"
+        exit 1
+    fi
+
+    ffplay -nodisp -autoexit $expanded_path >/dev/null 2>&1
 }
 
-name="$1"
-pid="$(xdotool search --class "$name" getwindowpid || true)"
+process_name="$1"
+executable_name="$1"
+parts=($(echo "$process_name" | tr ':' ' '))
 
+# check if pid name is different than binary name
+if [ ${#parts[@]} -ge 2 ]; then
+    process_name="${parts[0]}"
+    executable_name="${parts[1]}"
+fi
+
+echo "Searching window pid using name: $process_name"
+
+pid="$(pgrep -o -x $process_name)"
+echo "Window PID: $pid"
+
+if [ ! $(which $executable_name) ]
+then
+  echo "Executable not found: $executable_name"
+  exit 1;
+fi
 #  if no process is currently open, simply open with binary
 if [ -z $pid ]; then
-    nohup $name &>/dev/null &
-    play_sound $2
+    sound=$2
+    # remove 3 arguments and pass rest of args to application bin
+    shift
+    shift
+    shift
+    echo "Starting With: '$executable_name' $@"
+    nohup $executable_name $@ &>/dev/null &
+    play_sound $sound
     exit 0
 fi
 
-windowData="$(xdotool search --pid $pid | tail -1)"
-windowData="$(wmctrl -l -p | grep $pid)"
-windowId="${windowData:0:10}"
+windowid=$(wmctrl -lp | awk -v pid=$pid '$3 == pid {print $1}')
+echo "Found Window ID: $windowid"
+state="$(xprop -id $windowid | grep -i '_net_wm_state(atom) = ')"
+echo "Window State: $state"
 
-state="$(xprop -id $windowId | grep '_NET_WM_STATE(ATOM) = ')"
-
-# hidden/minimized window
-if [[ $state == *"_NET_WM_STATE_HIDDEN"* ]]; then
+if [[ ${state,,} == *"_net_wm_state_hidden"* ]]; then
     eval $(xdotool getmouselocation --shell)
-    xdotool windowmove $windowId $X $Y
-    wmctrl -ir $wid -e 0,$X,$Y,"100%", "100%"
-    xdotool windowactivate $windowId
+    echo "Script Action: Maximizing"
+    echo "Mouse Location: $X, $Y"
+    xdotool windowmove "$windowid" "$X" "$Y"
+    xdotool windowactivate $windowid
     play_sound "$2"
-
 else
     # not hidden
-    xdotool windowminimize $windowId
+    echo "Script Action: Minimizing"
+    xdotool windowminimize $windowid
     play_sound "$3"
 fi
