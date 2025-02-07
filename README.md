@@ -17,7 +17,7 @@ Download script to machine where $PATH is available:
 ```bash
 cd /tmp
 
-desired_version=0.1.1
+desired_version=0.1.0
 
 wget https://raw.githubusercontent.com/surgiie/quake/refs/tags/v$desired_version/quake
 
