@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+version="0.1.1"
+
+if [ "$1" = "--version" ]; then
+    echo "v$version"
+    exit 0
+fi
+
+if [ "$#" = 0 ]; then
+    echo "usage: quake <process-name:path-name> <mp3-focus-file> <mp3-hide-file>"
+    exit 0
+fi
+
+if ! command -v xdotool 2>&1 >/dev/null
+then
+    echo "xdotool is required"
+    exit 1
+fi
+
+if ! command -v wmctrl 2>&1 >/dev/null
+then
+    echo "wmctrl is required"
+    exit 1
+fi
+
+play_sound() {
+    # expand ~ to $home
+    input_path="$1"
+    expanded_path="${input_path/#\~/$HOME}"
+
+    if [ -z $1 ]; then
+        echo "no sound file provided"
+        return
+    fi
+    if ! command -v ffplay 2>&1 >/dev/null
+    then
+        echo "ffmpeg/ffplay is required"
+        exit 1
+    fi
+
+    if [ ! -f $expanded_path ]; then
+        echo "file not found: $1"
+        exit 1
+    fi
+
+    ffplay -nodisp -autoexit $expanded_path >/dev/null 2>&1
+}
+
+process_name="$1"
+executable_name="$1"
+parts=($(echo "$process_name" | tr ':' ' '))
+
+# check if pid name is different than binary name
+if [ ${#parts[@]} -ge 2 ]; then
+    process_name="${parts[0]}"
+    executable_name="${parts[1]}"
+fi
+
+echo "Searching window pid using name: $process_name"
+
+pid="$(pgrep -o -x $process_name)"
+echo "Window PID: $pid"
+
+if [ ! command -v $executable_name 2>&1 >/dev/null ]; then
+  echo "Executable not found: $executable_name"
+  exit 1;
+fi
+#  if no process is currently open, simply open with binary
+if [ -z $pid ]; then
+    sound=$2
+    # remove 3 arguments and pass rest of args to application bin
+    shift
+    shift
+    shift
+    echo "Starting With: '$executable_name' $@"
+    nohup $executable_name $@ &>/dev/null & disown
+    play_sound $sound
+    exit 0
+fi
+
+windowid=$(wmctrl -lp | awk -v pid=$pid '$3 == pid {print $1}')
+echo "Found Window ID: $windowid"
+state="$(xprop -id $windowid | grep -i '_net_wm_state(atom) = ')"
+echo "Window State: $state"
+
+if [[ ${state,,} == *"_net_wm_state_hidden"* ]]; then
+    eval $(xdotool getmouselocation --shell)
+    echo "Script Action: Maximizing"
+    echo "Mouse Location: $X, $Y"
+    xdotool windowmove "$windowid" "$X" "$Y"
+    xdotool windowactivate $windowid
+    play_sound "$2"
+else
+    # not hidden
+    echo "Script Action: Minimizing"
+    xdotool windowminimize $windowid
+    play_sound "$3"
+fi
