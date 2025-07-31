@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-version="0.1.0"
+version="0.1.1"
 
 if [ "$1" = "--version" ]; then
     echo "v$version"
@@ -71,16 +71,34 @@ if [ -z $pid ]; then
     shift
     shift
     echo "Starting With: '$executable_name' $@"
-    nohup $executable_name $@ &>/dev/null &
+    nohup $executable_name "$@" &>/dev/null &
     disown
     play_sound $sound
     exit 0
 fi
 
-windowid=$(wmctrl -lp | awk -v pid=$pid '$3 == pid {print $1}')
+# Wait for the window to appear
+for i in {1..20}; do
+    pid="$(pgrep -o -x $process_name)"
+    windowid=$(wmctrl -lp | awk -v pid=$pid '$3 == pid {print $1}')
+    if [ ! -z "$windowid" ]; then
+        break
+    fi
+    sleep 0.25
+done
+
 echo "Found Window ID: $windowid"
 state="$(xprop -id $windowid | grep -i '_net_wm_state(atom) = ')"
 echo "Window State: $state"
+if [ -z "$windowid" ]; then
+    echo "Error: Could not find window ID."
+    exit 1
+fi
+
+if ! xprop -id "$windowid" &>/dev/null; then
+    echo "Error: Invalid window ID for xprop."
+    exit 1
+fi
 
 if [[ ${state,,} == *"_net_wm_state_hidden"* ]]; then
     eval $(xdotool getmouselocation --shell)
