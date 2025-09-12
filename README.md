@@ -30,7 +30,7 @@ mv ./wintoggle $HOME/.local/bin/wintoggle
 # searches for a process with "firefox" in its name (the more characters here the better as its a "contains" search) and toggles it in or out of the current active monitor
 wintoggle --name "firefox"
 
-# when the application is not running, start it with the the same --name value, if the executabable differes from this value, use the --cmd flag, for example
+# when the application is not running, start it with the the same --name value, if the executabable differs from this value, use the --cmd flag, for example
 # firefox is searchable in pgrep with "firefox-bin" but the executable is "firefox"
 wintoggle --name "firefox-bin" --cmd "firefox"
 
